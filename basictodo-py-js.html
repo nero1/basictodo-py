@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python Todo App</title>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        input[type="text"] {
+            width: 70%;
+            padding: 8px;
+            margin-right: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            padding: 8px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            margin: 5px 0;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+        }
+        .delete-btn {
+            background-color: #ff4444;
+            padding: 5px 10px;
+        }
+        .delete-btn:hover {
+            background-color: #cc0000;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Python Todo App</h1>
+        <div>
+            <input type="text" id="todo-input" placeholder="Enter a new todo">
+            <button onclick="addTodo()">Add</button>
+        </div>
+        <ul id="todo-list"></ul>
+    </div>
+
+    <script>
+        let pyodide;
+        let todoList = [];
+
+        async function initPyodide() {
+            pyodide = await loadPyodide();
+            await pyodide.loadPackagesFromImports('import json');
+            
+            // Initialize Python code
+            await pyodide.runPython(`
+def add_todo(todo_text, todos):
+    if todo_text.strip():
+        new_todos = todos + [todo_text]
+        return new_todos
+    return todos
+
+def remove_todo(index, todos):
+    if 0 <= index < len(todos):
+        return todos[:index] + todos[index + 1:]
+    return todos
+            `);
+
+            // Load saved todos
+            const savedTodos = localStorage.getItem('todos');
+            if (savedTodos) {
+                todoList = JSON.parse(savedTodos);
+                renderTodos();
+            }
+
+            // Add event listener for Enter key
+            document.getElementById('todo-input').addEventListener('keypress', async function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    await addTodo();
+                }
+            });
+        }
+
+        async function addTodo() {
+            const input = document.getElementById('todo-input');
+            const todoText = input.value;
+            
+            if (todoText.trim()) {
+                const pythonCode = `add_todo(${JSON.stringify(todoText)}, ${JSON.stringify(todoList)})`;
+                todoList = await pyodide.runPython(pythonCode).toJs();
+                localStorage.setItem('todos', JSON.stringify(todoList));
+                
+                input.value = '';
+                renderTodos();
+            }
+        }
+
+        async function deleteTodo(index) {
+            const pythonCode = `remove_todo(${index}, ${JSON.stringify(todoList)})`;
+            todoList = await pyodide.runPython(pythonCode).toJs();
+            localStorage.setItem('todos', JSON.stringify(todoList));
+            renderTodos();
+        }
+
+        function renderTodos() {
+            const todoListElement = document.getElementById('todo-list');
+            todoListElement.innerHTML = '';
+            
+            todoList.forEach((todo, index) => {
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <span>${todo}</span>
+                    <button class="delete-btn" onclick="deleteTodo(${index})">Delete</button>
+                `;
+                todoListElement.appendChild(li);
+            });
+        }
+
+        // Initialize the application
+        initPyodide();
+    </script>
+</body>
+</html>
